@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schneider Electric - Li-ion vs VRLA TCO Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- 1. Design Tokens (Schneider Electric Style) --- */
+        :root {
+            --se-green: #3DCD58;       /* Life Is On Green */
+            --se-green-dark: #2db645;  /* For slider shadow */
+            --se-blue: #4DB4FA;        /* Cyan/Blue secondary */
+            --se-header-gray: #9EA0A5; /* Section Header Gray */
+            --se-bg-gray: #F2F2F2;     /* Panel Background */
+            --text-dark: #333333;
+            --text-white: #FFFFFF;
+        }
+
+        body { 
+            font-family: Arial, Helvetica, sans-serif; /* SE uses clean sans-serif */
+            margin: 0; 
+            background-color: #ffffff; 
+            color: var(--text-dark); 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        /* --- Top Navigation --- */
+        header { 
+            background-color: var(--se-green); 
+            padding: 0 30px; 
+            height: 70px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        
+        .brand { display: flex; align-items: center; gap: 20px; }
+        /* White Logo Filter */
+        .brand img { height: 30px; width: auto; display: block; filter: brightness(0) invert(1); }
+        .title { 
+            font-size: 20px; 
+            font-weight: 400; 
+            color: #fff;
+            border-left: 1px solid rgba(255,255,255,0.5); 
+            padding-left: 20px;
+            letter-spacing: 0.5px;
+        }
+        .header-icons i { font-size: 22px; color: #fff; cursor:pointer; opacity: 0.9; }
+
+        /* 主容器 */
+        .container { flex: 1; padding: 30px; overflow-y: auto; max-width: 1600px; margin: 0 auto; width: 100%; box-sizing: border-box; display: flex; gap: 30px; }
+
+        /* --- 左側輸入區 --- */
+        .sidebar { 
+            width: 380px; 
+            display: flex; flex-direction: column; gap: 20px; flex-shrink: 0;
+        }
+
+        /* 面板樣式 */
+        .panel { 
+            background: #ffffff; border: none; /* Removed border */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden;
+            border-radius: 4px;
+        }
+        .panel-header { 
+            background: var(--se-header-gray); 
+            color: #fff; 
+            padding: 10px 15px; 
+            font-size: 14px; 
+            font-weight: 700; 
+            display: flex; justify-content: space-between; align-items: center; 
+            border-radius: 4px 4px 0 0;
+        }
+        .panel-header i { color: rgba(255,255,255,0.8); }
+
+        .panel-body { 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            background: var(--se-bg-gray); /* Light gray content bg */
+        }
+
+        /* 輸入控制項 */
+        .input-row { display: flex; flex-direction: column; gap: 8px; }
+        .input-label-group { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: normal; color: #555; }
+        
+        .val-display { font-weight: 700; color: #333; font-family: Arial, sans-serif; font-size: 14px; }
+
+        /* 下拉選單 */
+        select { 
+            padding: 8px; border: 1px solid #ccc; border-radius: 4px; 
+            background: linear-gradient(to bottom, #f9f9f9, #e0e0e0);
+            font-size: 13px; color: #333; outline: none; width: 100%;
+        }
+
+        /* Schneider Style Slider (Green Ball) */
+        .slider-wrapper { display: flex; align-items: center; height: 30px; }
+        input[type="range"] {
+            flex: 1; height: 8px; -webkit-appearance: none; appearance: none; background: #d3d3d3; border-radius: 4px; outline: none; cursor: pointer;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 22px; height: 22px; 
+            border-radius: 50%; 
+            background: radial-gradient(circle at 35% 35%, #84e897, var(--se-green), var(--se-green-dark));
+            border: 1px solid #2db645;
+            cursor: pointer; 
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3); transition: transform 0.1s;
+            margin-top: -1px;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+
+        /* --- 右側結果區 --- */
+        .main-content { flex: 1; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; }
+
+        /* KPI 卡片 */
+        .kpi-group { display: flex; gap: 20px; }
+        .kpi-card {
+            flex: 1; background: #ffffff; padding: 20px; border-radius: 4px; text-align: center; 
+            border: 1px solid #e5e7eb; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-3px); border-bottom: 3px solid var(--se-green); }
+        .kpi-card h4 { margin: 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; }
+        .kpi-card h2 { margin: 10px 0 0; font-size: 32px; color: #333; font-weight: 700; }
+        .kpi-unit { font-size: 13px; color: #999; font-weight: 500; }
+        .kpi-accent { color: var(--se-green) !important; }
+
+        /* 圖表區塊 */
+        .chart-row { display: flex; gap: 20px; flex: 1; min-height: 380px; }
+        .chart-panel {
+            flex: 1; background: #ffffff; border: 1px solid #ddd; border-radius: 4px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03); padding: 0; display: flex; flex-direction: column;
+        }
+        .chart-header { 
+            font-size: 14px; font-weight: 700; color: #fff; background: var(--se-header-gray);
+            padding: 10px 15px; text-transform: uppercase; display: flex; justify-content: space-between; 
+            border-radius: 4px 4px 0 0;
+        }
+        .chart-container { flex: 1; position: relative; padding: 15px; }
+
+        /* --- 手機版 RWD --- */
+        @media screen and (max-width: 900px) {
+            body { height: auto; min-height: 100vh; overflow-y: auto; }
+            .container { flex-direction: column; height: auto; padding: 15px; gap: 20px; overflow: visible; }
+            .sidebar, .main-content { width: 100%; max-width: 100%; border-right: none; padding: 0; }
+            .kpi-group, .chart-row { flex-direction: column; }
+            .chart-panel { min-height: 300px; }
+            header { padding: 0 15px; }
+            .title { font-size: 16px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/9/95/Schneider_Electric_2007.svg" alt="Schneider Electric">
+            <div class="title">Li-ion vs VRLA TCO Calculator</div>
+        </div>
+        <div class="header-icons"><i class="fas fa-battery-full"></i></div>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            
+            <div class="panel">
+                <div class="panel-header">General Attributes <i class="fas fa-globe"></i></div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Location / Region</label>
+                        </div>
+                        <select id="location" onchange="updateDefaults()">
+                            <option value="US">United States (Avg)</option>
+                            <option value="CN">China (Avg)</option>
+                            <option value="EU">Europe (Avg)</option>
+                        </select>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Electricity Cost ($/kWh)</label>
+                            <span id="val_elec" class="val-display">$ 0.12</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_elec" min="0.05" max="0.50" step="0.01" value="0.12" oninput="calc()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">UPS Parameters <i class="fas fa-server"></i></div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>UPS Capacity (kW)</label>
+                            <span id="val_cap" class="val-display">1000 kW</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_cap" min="100" max="5000" step="100" value="1000" oninput="calc()">
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Analysis Timeline (Years)</label>
+                            <span id="val_time" class="val-display">10 Yrs</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_time" min="5" max="15" step="1" value="10" oninput="calc()">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">Battery Parameters <i class="fas fa-bolt"></i></div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Backup Time (Minutes)</label>
+                            <span id="val_backup" class="val-display">10 Min</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_backup" min="5" max="60" step="1" value="10" oninput="calc()">
+                        </div>
+                    </div>
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>VRLA Replacement (Years)</label>
+                            <span id="val_vrla_life" class="val-display">4 Yrs</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_vrla_life" min="3" max="6" step="1" value="4" oninput="calc()">
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#666; padding-top:5px; border-top:1px solid #ddd;">
+                        *Li-ion battery life estimated at 12-15 years.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="main-content">
+            
+            <div class="kpi-group">
+                <div class="kpi-card">
+                    <h4>Total Savings (10Y)</h4>
+                    <h2 id="kpi_savings" class="kpi-accent">$ 350k</h2>
+                    <span class="kpi-unit">Li-ion vs VRLA</span>
+                </div>
+                <div class="kpi-card">
+                    <h4>TCO Reduction</h4>
+                    <h2 id="kpi_pct">28%</h2>
+                    <span class="kpi-unit">Lower Cost</span>
+                </div>
+                <div class="kpi-card">
+                    <h4>Space Saved</h4>
+                    <h2 id="kpi_space" style="color:#333">60%</h2>
+                    <span class="kpi-unit">Footprint Reduction</span>
+                </div>
+            </div>
+
+            <div class="chart-row">
+                <div class="chart-panel" style="flex:1.5;">
+                    <div class="chart-header">
+                        <span>Cumulative TCO Cashflow</span>
+                        <i class="fas fa-chart-line" style="opacity:0.8"></i>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="lineChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-panel" style="flex:1;">
+                    <div class="chart-header">
+                        <span>10-Year Cost Breakdown</span>
+                        <i class="fas fa-chart-bar" style="opacity:0.8"></i>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="barChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Chart.js Settings for SE Style
+        Chart.defaults.font.family = "Arial, sans-serif";
+        Chart.defaults.color = '#666';
+        Chart.defaults.scale.grid.color = '#f0f0f0';
+
+        let lineChart, barChart;
+        
+        // Colors
+        const colVRLA = '#9EA0A5'; // Gray for Legacy
+        const colLiion = '#3DCD58'; // SE Green for Modern
+
+        // --- Defaults ---
+        function updateDefaults() {
+            const loc = document.getElementById('location').value;
+            const elecSlider = document.getElementById('in_elec');
+            
+            if (loc === 'US') elecSlider.value = 0.12;
+            if (loc === 'CN') elecSlider.value = 0.09; 
+            if (loc === 'EU') elecSlider.value = 0.25;
+            
+            calc();
+        }
+
+        function initCharts() {
+            // Line Chart
+            const ctxLine = document.getElementById('lineChart').getContext('2d');
+            lineChart = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'VRLA (Legacy)',
+                            borderColor: colVRLA, 
+                            backgroundColor: colVRLA,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            data: [],
+                            tension: 0.1,
+                            borderDash: [5, 5] // Dashed line for legacy
+                        },
+                        {
+                            label: 'Li-ion (Modern)',
+                            borderColor: colLiion, 
+                            backgroundColor: colLiion,
+                            borderWidth: 3,
+                            pointRadius: 4,
+                            data: [],
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'top' }, tooltip: { backgroundColor: '#333', titleColor:'#fff' } },
+                    scales: { y: { beginAtZero: true, title: { display:true, text:'Cumulative Cost ($)' } } }
+                }
+            });
+
+            // Bar Chart
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            barChart = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: ['CapEx', 'Maintenance', 'Energy', 'Replacement', 'Space'],
+                    datasets: [
+                        {
+                            label: 'Li-ion',
+                            backgroundColor: colLiion,
+                            data: []
+                        },
+                        {
+                            label: 'VRLA',
+                            backgroundColor: colVRLA,
+                            data: []
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } },
+                    scales: { y: { beginAtZero: true, grid:{ display:true } }, x: { grid:{ display:false } } }
+                }
+            });
+        }
+
+        // --- Calculation Logic ---
+        function calc() {
+            const elecRate = parseFloat(document.getElementById('in_elec').value);
+            const capacity = parseInt(document.getElementById('in_cap').value);
+            const years = parseInt(document.getElementById('in_time').value);
+            const backup = parseInt(document.getElementById('in_backup').value);
+            const vrlaLife = parseInt(document.getElementById('in_vrla_life').value);
+
+            document.getElementById('val_elec').innerText = "$ " + elecRate.toFixed(2);
+            document.getElementById('val_cap').innerText = capacity + " kW";
+            document.getElementById('val_time').innerText = years + " Yrs";
+            document.getElementById('val_backup').innerText = backup + " Min";
+            document.getElementById('val_vrla_life').innerText = vrlaLife + " Yrs";
+
+            // Simplified Model
+            const baseUnitCost = 150; 
+            const vrlaCapEx = capacity * baseUnitCost * (backup / 10); 
+            const liionCapEx = vrlaCapEx * 1.8;
+
+            const vrlaMaintYear = vrlaCapEx * 0.08;
+            const liionMaintYear = liionCapEx * 0.02; 
+
+            const kwhYear = capacity * 24 * 365;
+            const vrlaEnergyYear = kwhYear * 0.02 * elecRate;
+            const liionEnergyYear = kwhYear * 0.005 * elecRate;
+
+            const racksVRLA = Math.ceil(capacity / 100); 
+            const racksLiion = Math.ceil(racksVRLA * 0.4);
+            const spaceCostYearVRLA = racksVRLA * 1000; 
+            const spaceCostYearLiion = racksLiion * 1000;
+
+            let cumVRLA = 0;
+            let cumLiion = 0;
+            let dataVRLA = [];
+            let dataLiion = [];
+            let labels = [];
+
+            let totalRepVRLA = 0;
+            let totalRepLiion = 0; 
+
+            for(let i=0; i<=years; i++) {
+                labels.push("Year " + i);
+                if (i === 0) {
+                    cumVRLA = vrlaCapEx;
+                    cumLiion = liionCapEx;
+                } else {
+                    cumVRLA += (vrlaMaintYear + vrlaEnergyYear + spaceCostYearVRLA);
+                    cumLiion += (liionMaintYear + liionEnergyYear + spaceCostYearLiion);
+
+                    if (i % vrlaLife === 0) {
+                        const repCost = vrlaCapEx * 0.9; 
+                        cumVRLA += repCost;
+                        totalRepVRLA += repCost;
+                    }
+                    if (i > 12) { 
+                         const repCost = liionCapEx * 0.8;
+                         cumLiion += repCost;
+                         totalRepLiion += repCost;
+                    }
+                }
+                dataVRLA.push(cumVRLA);
+                dataLiion.push(cumLiion);
+            }
+
+            lineChart.data.labels = labels;
+            lineChart.data.datasets[0].data = dataVRLA;
+            lineChart.data.datasets[1].data = dataLiion;
+            lineChart.update();
+
+            const totalMaintV = vrlaMaintYear * years;
+            const totalEnergyV = vrlaEnergyYear * years;
+            const totalSpaceV = spaceCostYearVRLA * years;
+
+            const totalMaintL = liionMaintYear * years;
+            const totalEnergyL = liionEnergyYear * years;
+            const totalSpaceL = spaceCostYearLiion * years;
+
+            barChart.data.datasets[0].data = [liionCapEx, totalMaintL, totalEnergyL, totalRepLiion, totalSpaceL];
+            barChart.data.datasets[1].data = [vrlaCapEx, totalMaintV, totalEnergyV, totalRepVRLA, totalSpaceV];
+            barChart.update();
+
+            const finalVRLA = dataVRLA[years];
+            const finalLiion = dataLiion[years];
+            const savings = finalVRLA - finalLiion;
+            const pct = (savings / finalVRLA) * 100;
+
+            document.getElementById('kpi_savings').innerText = "$ " + Math.round(savings/1000) + "k";
+            document.getElementById('kpi_pct').innerText = pct.toFixed(1) + "%";
+            document.getElementById('kpi_space').innerText = "60%"; 
+        }
+
+        initCharts();
+        calc();
+
+    </script>
+</body>
+</html>

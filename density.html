@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schneider Electric - Server Consolidation & Density Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- 1. Design Tokens (Schneider Electric Style) --- */
+        :root {
+            --se-green: #3DCD58;       /* Life Is On Green */
+            --se-green-dark: #2db645;  /* For slider shadow */
+            --se-blue: #4DB4FA;        /* Cyan/Blue secondary */
+            --se-header-gray: #9EA0A5; /* Section Header Gray */
+            --se-bg-gray: #F2F2F2;     /* Panel Background */
+            --text-dark: #333333;
+            --text-white: #FFFFFF;
+        }
+
+        body { 
+            font-family: Arial, Helvetica, sans-serif; 
+            margin: 0; 
+            background-color: #ffffff; 
+            color: var(--text-dark); 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        /* --- Top Navigation --- */
+        header { 
+            background-color: var(--se-green); 
+            padding: 0 30px; 
+            height: 70px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        
+        .brand { display: flex; align-items: center; gap: 20px; }
+        .brand img { height: 30px; width: auto; display: block; filter: brightness(0) invert(1); }
+        .title { 
+            font-size: 20px; 
+            font-weight: 400; 
+            color: #fff;
+            border-left: 1px solid rgba(255,255,255,0.5); 
+            padding-left: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        /* --- Main Layout --- */
+        .container { 
+            display: flex; 
+            flex: 1; 
+            height: calc(100vh - 70px); 
+            overflow: hidden;
+        }
+
+        /* --- Left Sidebar (Inputs) --- */
+        .sidebar {
+            width: 380px;
+            background-color: #fff;
+            padding: 30px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        /* Panel Style for Inputs */
+        .input-panel {
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .panel-header {
+            background: var(--se-header-gray);
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .panel-body {
+            padding: 20px;
+            background: var(--se-bg-gray);
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        /* Input Rows */
+        .input-row { display: flex; flex-direction: column; gap: 8px; }
+        .input-label-group { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: normal; color: #555; }
+        
+        .val-display { font-weight: bold; color: #333; font-family: Arial, sans-serif; font-size: 14px; }
+
+        /* Schneider Slider */
+        .slider-wrapper { display: flex; align-items: center; height: 30px; }
+        input[type="range"] {
+            flex: 1; height: 8px; background: #d3d3d3; border-radius: 4px; outline: none; -webkit-appearance: none; appearance: none; cursor: pointer;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none; -webkit-appearance: none; width: 22px; height: 22px; 
+            border-radius: 50%; 
+            background: radial-gradient(circle at 35% 35%, #84e897, var(--se-green), var(--se-green-dark));
+            border: 1px solid #2db645;
+            cursor: pointer; 
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3); transition: transform 0.1s;
+            margin-top: -1px;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+
+        /* --- Right Content (Results) --- */
+        .main-content { 
+            flex: 1; 
+            padding: 40px; 
+            display: flex; flex-direction: column; gap: 25px; 
+            overflow-y: auto; background-color: #ffffff; 
+        }
+
+        /* KPI Cards */
+        .kpi-group { display: flex; gap: 20px; }
+        .kpi-card {
+            flex: 1; background: #ffffff; padding: 25px; border-radius: 4px; text-align: center; 
+            border: 1px solid #e0e0e0; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s;
+            position: relative;
+        }
+        .kpi-card:hover { transform: translateY(-3px); border-bottom: 3px solid var(--se-green); }
+        
+        .kpi-card h4 { margin: 0; font-size: 12px; color: #666; text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px; }
+        .kpi-card h2 { margin: 10px 0 0; font-size: 32px; color: #333; font-weight: 700; }
+        .kpi-unit { font-size: 13px; color: #999; font-weight: 500; }
+        .kpi-accent { color: var(--se-green) !important; }
+
+        /* Chart Panels */
+        .chart-panel {
+            flex: 1; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 4px; 
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); padding: 0; min-height: 300px;
+            display: flex; flex-direction: column;
+        }
+        .chart-header { 
+            background: var(--se-header-gray); color: #fff; padding: 10px 15px; font-weight: bold; font-size: 14px; text-transform: uppercase;
+            border-radius: 4px 4px 0 0;
+        }
+        .chart-container { flex: 1; position: relative; padding: 20px; }
+
+        /* --- Mobile Responsive --- */
+        @media screen and (max-width: 900px) {
+            body { height: auto; min-height: 100vh; overflow-y: auto; }
+            .container { flex-direction: column; height: auto; overflow: visible; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #ddd; padding: 20px; }
+            .main-content { padding: 20px; }
+            .kpi-group { flex-direction: column; }
+            header { padding: 0 15px; }
+            .title { font-size: 16px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/9/95/Schneider_Electric_2007.svg" alt="Schneider Electric">
+            <div class="title">Server Consolidation & Density Calculator</div>
+        </div>
+        <div><i class="fas fa-server" style="color: #fff; font-size: 20px; opacity: 0.9;"></i></div>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            
+            <div class="input-panel">
+                <div class="panel-header">Current Legacy Environment <i class="fas fa-history"></i></div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Current Rack Count</label>
+                            <span id="val_racks" class="val-display">50</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_racks" min="10" max="200" step="5" value="50" oninput="calc()">
+                        </div>
+                    </div>
+
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Avg. Power per Rack (kW)</label>
+                            <span id="val_power_rack" class="val-display">8 kW</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_power_rack" min="4" max="20" step="1" value="8" oninput="calc()">
+                        </div>
+                    </div>
+                    
+                    <div style="font-size:12px; color:#666; background:#fff; border:1px solid #ddd; padding:10px; border-radius:4px;">
+                        Total Current Power: <strong><span id="total_curr_power">400</span> kW</strong>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-panel"> 
+                <div class="panel-header" style="background: var(--se-green);">
+                    Target New Deployment <i class="fas fa-leaf"></i>
+                </div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Consolidation Ratio (X:1)</label>
+                            <span id="val_ratio" class="val-display" style="color:var(--se-green);">4 : 1</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_ratio" min="2" max="10" step="1" value="4" oninput="calc()">
+                        </div>
+                        <div style="font-size:11px; color:#999;">e.g., Replacing 4 old servers with 1 new server.</div>
+                    </div>
+
+                    <div class="input-row">
+                        <div class="input-label-group">
+                            <label>Target Power per Rack (kW)</label>
+                            <span id="val_target_density" class="val-display" style="color:var(--se-green);">25 kW</span>
+                        </div>
+                        <div class="slider-wrapper">
+                            <input type="range" id="in_target_density" min="10" max="50" step="5" value="25" oninput="calc()">
+                        </div>
+                        <div style="font-size:11px; color:#999;">Higher density supported by modern infrastructure.</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="main-content">
+            
+            <div class="kpi-group">
+                <div class="kpi-card">
+                    <h4>Racks Eliminated</h4>
+                    <h2 id="kpi_racks_saved" class="kpi-accent">34</h2>
+                    <span class="kpi-unit">Racks Freed</span>
+                </div>
+                <div class="kpi-card">
+                    <h4>Space Reduction</h4>
+                    <h2 id="kpi_space_saved">68%</h2>
+                    <span class="kpi-unit">Footprint Saved</span>
+                </div>
+                <div class="kpi-card">
+                    <h4>Total Power Reduction</h4>
+                    <h2 id="kpi_power_saved" class="kpi-accent">150 kW</h2>
+                    <span class="kpi-unit">Energy Saved</span>
+                </div>
+            </div>
+
+            <div class="chart-panel" style="flex:1.5;">
+                <div class="chart-header">Rack Footprint Comparison</div>
+                <div class="chart-container">
+                    <canvas id="rackChart"></canvas>
+                </div>
+            </div>
+
+             <div class="chart-panel" style="flex:1.5;">
+                <div class="chart-header">Total Power Consumption Comparison</div>
+                <div class="chart-container">
+                    <canvas id="powerChart"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // Chart.js Settings for SE Style
+        Chart.defaults.font.family = "Arial, sans-serif";
+        Chart.defaults.color = '#666';
+        Chart.defaults.scale.grid.color = '#f0f0f0';
+
+        let rackChart, powerChart;
+
+        function initCharts() {
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: '#333' } },
+                scales: {
+                    y: { beginAtZero: true, grid: { drawBorder: false } },
+                    x: { grid: { display: false } }
+                }
+            };
+
+            // Chart 1: Rack Count
+            const ctxRack = document.getElementById('rackChart').getContext('2d');
+            rackChart = new Chart(ctxRack, {
+                type: 'bar',
+                data: {
+                    labels: ['Legacy Deployment', 'New Deployment'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['#9EA0A5', '#3DCD58'], // Gray vs Green
+                        borderRadius: 4,
+                        barPercentage: 0.5
+                    }]
+                },
+                options: { 
+                    ...commonOptions,
+                    scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: 'Number of Racks' } } }
+                 }
+            });
+
+            // Chart 2: Power Consumption
+            const ctxPower = document.getElementById('powerChart').getContext('2d');
+            powerChart = new Chart(ctxPower, {
+                type: 'bar',
+                data: {
+                    labels: ['Legacy Deployment', 'New Deployment'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['#666666', '#2db645'], // Dark Gray vs Dark Green
+                        borderRadius: 4,
+                        barPercentage: 0.5
+                    }]
+                },
+                options: { 
+                    ...commonOptions,
+                    scales: { ...commonOptions.scales, y: { ...commonOptions.scales.y, title: { display: true, text: 'Total Power (kW)' } } }
+                 }
+            });
+        }
+
+        // --- Calculation Logic ---
+        function calc() {
+            const currRacks = parseInt(document.getElementById('in_racks').value);
+            const currPowerPerRack = parseInt(document.getElementById('in_power_rack').value);
+            const ratio = parseInt(document.getElementById('in_ratio').value);
+            const targetDensity = parseInt(document.getElementById('in_target_density').value);
+
+            document.getElementById('val_racks').innerText = currRacks;
+            document.getElementById('val_power_rack').innerText = currPowerPerRack + " kW";
+            document.getElementById('val_ratio').innerText = ratio + " : 1";
+            document.getElementById('val_target_density').innerText = targetDensity + " kW";
+
+            // Calc Current
+            const totalCurrPower = currRacks * currPowerPerRack;
+            document.getElementById('total_curr_power').innerText = totalCurrPower;
+
+            // Calc New (Simplified Model)
+            // Factor: 40% base + efficiency gain from consolidation
+            const consolidationFactor = 0.4 + (1/ratio * 0.2); 
+            const totalNewPowerEstimated = totalCurrPower * consolidationFactor;
+
+            const newRacks = Math.ceil(totalNewPowerEstimated / targetDensity);
+            const totalNewPowerFinal = newRacks * targetDensity;
+
+            // Calc Savings
+            const racksSaved = currRacks - newRacks;
+            const spaceSavedPct = ((racksSaved / currRacks) * 100).toFixed(0);
+            const powerSaved = totalCurrPower - totalNewPowerFinal;
+
+            // Update KPIs
+            document.getElementById('kpi_racks_saved').innerText = racksSaved;
+            document.getElementById('kpi_space_saved').innerText = spaceSavedPct + "%";
+            document.getElementById('kpi_power_saved').innerText = Math.round(powerSaved) + " kW";
+
+            // Update Charts
+            rackChart.data.datasets[0].data = [currRacks, newRacks];
+            rackChart.update();
+
+            powerChart.data.datasets[0].data = [totalCurrPower, totalNewPowerFinal];
+            powerChart.update();
+        }
+
+        initCharts();
+        calc();
+
+    </script>
+</body>
+</html>

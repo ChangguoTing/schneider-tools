@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schneider Electric - Capital Cost Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        /* --- 1. Design Tokens (Schneider Electric Style) --- */
+        :root {
+            --se-green: #3DCD58;       /* Life Is On Green */
+            --se-green-dark: #2db645;  /* For slider shadow */
+            --se-blue: #4DB4FA;        /* Cyan/Blue secondary */
+            --se-header-gray: #9EA0A5; /* Section Header Gray */
+            --se-bg-gray: #F2F2F2;     /* Panel Background */
+            --text-dark: #333333;
+            --text-white: #FFFFFF;
+        }
+
+        body { 
+            font-family: Arial, Helvetica, sans-serif; 
+            margin: 0; 
+            background-color: #ffffff; 
+            color: var(--text-dark); 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+
+        /* --- Top Navigation --- */
+        header { 
+            background-color: var(--se-green); 
+            padding: 0 30px; 
+            height: 70px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+            z-index: 10;
+        }
+        
+        .brand { display: flex; align-items: center; gap: 20px; }
+        .brand img { height: 30px; width: auto; display: block; filter: brightness(0) invert(1); }
+        .title { 
+            font-size: 20px; 
+            font-weight: 400; 
+            color: #fff;
+            border-left: 1px solid rgba(255,255,255,0.5); 
+            padding-left: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        /* --- Main Layout --- */
+        .container { 
+            display: flex; 
+            flex: 1; 
+            height: calc(100vh - 70px); 
+            overflow: hidden;
+        }
+
+        /* --- Left Sidebar (Inputs) --- */
+        .sidebar {
+            width: 460px;
+            background-color: #fff;
+            padding: 25px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Input Group Styled as Panel */
+        .input-panel {
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .group-title {
+            background: var(--se-header-gray);
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .panel-body {
+            padding: 15px;
+            background: var(--se-bg-gray);
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        /* Input Rows */
+        .input-row { display: flex; align-items: center; justify-content: space-between; font-size: 13px; margin-bottom: 5px; color: #555; }
+        .input-row label { flex: 1; font-weight: normal; color: #333; }
+        
+        /* Selects */
+        select { 
+            flex: 1.2; 
+            padding: 6px 10px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            font-size: 12px; 
+            background: linear-gradient(to bottom, #f9f9f9, #e0e0e0);
+            color: #333;
+            outline: none; cursor: pointer;
+        }
+
+        /* Schneider Slider */
+        .slider-wrapper { flex: 1.5; display: flex; align-items: center; gap: 10px; }
+        input[type="range"] {
+            flex: 1; height: 8px; background: #d3d3d3; border-radius: 4px; outline: none; -webkit-appearance: none; appearance: none; cursor: pointer;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 20px; height: 20px; border-radius: 50%; 
+            background: radial-gradient(circle at 35% 35%, #84e897, var(--se-green), var(--se-green-dark));
+            border: 1px solid #2db645;
+            cursor: pointer; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: transform 0.1s;
+            margin-top: -1px;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.1); }
+
+        .val-box { font-weight: bold; width: 80px; text-align: right; font-size: 13px; color: #333; font-family: Arial, sans-serif; }
+
+        /* Matrix Grid (Redundancy) */
+        .grid-container { 
+            display: grid; grid-template-columns: 80px 1fr 1fr 1fr 80px; gap: 6px; 
+            background: #ffffff; padding: 12px; border-radius: 4px; border: 1px solid #e0e0e0;
+            font-size: 11px; text-align: center;
+        }
+        .grid-head { font-weight: bold; color: var(--se-green); font-size: 11px; text-transform: uppercase; }
+        .grid-row-label { text-align: left; font-weight: bold; align-self: center; color: #333; }
+        .tiny-select { width: 100%; padding: 4px; font-size: 11px; background: #fff; color: #333; border: 1px solid #ccc; border-radius: 2px; }
+
+        /* Checkbox (Green) */
+        .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 12px; color: #555; padding: 15px; background: var(--se-bg-gray); border-radius: 0 0 4px 4px; }
+        .check-item { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: normal; }
+        input[type="checkbox"] {
+            -webkit-appearance: none; appearance: none;
+            width: 16px; height: 16px; border: 1px solid #ccc; background: #fff; cursor: pointer; position: relative; display: flex; align-items: center; justify-content: center; border-radius: 3px;
+        }
+        input[type="checkbox"]:checked { background: var(--se-green); border-color: var(--se-green); }
+        input[type="checkbox"]:checked::after { content: '✓'; color: white; font-size: 12px; font-weight: bold; }
+
+        /* --- Right Content (Results) --- */
+        .main { flex: 1; background: #ffffff; padding: 30px; overflow-y: auto; }
+        
+        .res-header { color: #333; font-size: 18px; margin-bottom: 20px; font-weight: bold; border-bottom: 2px solid var(--se-green); padding-bottom: 10px; width: 100%; }
+
+        /* Result Section Bar */
+        .section-bar { 
+            background: var(--se-header-gray); 
+            color: #fff; 
+            padding: 10px 15px; 
+            font-size: 14px; font-weight: bold; margin-bottom: 0; border-radius: 4px 4px 0 0; 
+            display: flex; justify-content: space-between; align-items: center;
+            text-transform: uppercase;
+        }
+        
+        /* Summary Table */
+        .summary-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 30px; background: #fff; border: 1px solid #ddd; border-top: none; }
+        .summary-table td { padding: 12px 20px; border-bottom: 1px solid #f0f0f0; color: #333; }
+        .summary-table tr:last-child td { border-bottom: none; }
+        .res-val { text-align: right; font-weight: bold; color: #333; font-family: Arial, sans-serif; font-size: 15px; }
+
+        /* Charts */
+        .chart-wrapper {
+            border: 1px solid #ddd; border-top: none; padding: 20px; margin-bottom: 30px; border-radius: 0 0 4px 4px;
+        }
+        .chart-row { 
+            display: flex; align-items: center; height: 220px; 
+        }
+        .chart-container { width: 180px; height: 180px; }
+        
+        .legend { margin-left: 40px; font-size: 12px; display: flex; flex-direction: column; gap: 8px; color: #666; }
+        .legend div { display: flex; align-items: center; gap: 10px; }
+        .dot { width: 12px; height: 12px; display: inline-block; border-radius: 2px; }
+
+        /* --- Mobile Responsive --- */
+        @media screen and (max-width: 900px) {
+            .container { flex-direction: column; height: auto; overflow: visible; }
+            .sidebar { width: 100%; border-right: none; border-bottom: 1px solid #ddd; padding: 20px; }
+            .main { padding: 20px; }
+            header { padding: 0 15px; }
+            .title { font-size: 16px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/9/95/Schneider_Electric_2007.svg" alt="Schneider Electric">
+            <div class="title">Capital Cost Calculator</div>
+        </div>
+        <div><i class="fas fa-calculator" style="color: #fff; font-size: 20px; opacity: 0.9;"></i></div>
+    </header>
+
+    <div class="container">
+        <div class="sidebar">
+            
+            <div class="input-panel">
+                <div class="group-title">Data Center Environment</div>
+                <div class="panel-body">
+                    <div class="input-row">
+                        <label>Location</label>
+                        <div style="flex:1.2; display:flex; gap:5px;">
+                            <select id="region" onchange="updateLocation()"><option>N. America</option><option>Asia</option></select>
+                            <select id="country" onchange="updateLocation()">
+                                <option value="US">United States</option>
+                                <option value="TW">Taiwan</option>
+                                <option value="JP">Japan</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-row">
+                        <label>Design Capacity</label>
+                        <select id="capacity" onchange="calc()">
+                            <option value="500">500 kW</option>
+                            <option value="1000" selected>1000 kW</option>
+                            <option value="2000">2000 kW</option>
+                            <option value="5000">5000 kW</option>
+                        </select>
+                    </div>
+
+                    <div class="input-row">
+                        <label>Cooling System</label>
+                        <select id="cooling_type" onchange="calc()">
+                            <option value="1.2">CRAH with VFD chiller</option> 
+                            <option value="1.0">Air-cooled Chiller</option> 
+                            <option value="0.8">Direct Expansion (DX)</option> 
+                        </select>
+                    </div>
+
+                    <div class="input-row">
+                        <label>Power Density</label>
+                        <div class="slider-wrapper">
+                            <input type="range" id="density" min="2" max="20" step="1" value="4" oninput="calc()">
+                            <div class="val-box" id="disp_density">4 kW/rack</div>
+                        </div>
+                    </div>
+
+                    <div class="input-row">
+                        <label>Labor Rate</label>
+                        <div class="slider-wrapper">
+                            <input type="range" id="labor" min="20" max="200" step="10" value="90" oninput="calc()">
+                            <div class="val-box" id="disp_labor">$ 90 /hr</div>
+                        </div>
+                    </div>
+
+                    <div class="input-row">
+                        <label>Core & Shell</label>
+                        <div class="slider-wrapper">
+                            <input type="range" id="shell" min="50" max="300" step="10" value="90" oninput="calc()">
+                            <div class="val-box" id="disp_shell">$ 90 /ft²</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-panel">
+                <div class="group-title">Redundancy Level</div>
+                <div class="panel-body" style="padding: 10px;">
+                    <div class="grid-container">
+                        <div></div><div class="grid-head">IT Dist</div><div class="grid-head">UPS</div><div class="grid-head">Gen</div><div></div>
+                        
+                        <div class="grid-row-label">Power</div>
+                        <select class="tiny-select"><option>N</option><option>N+1</option></select>
+                        <select class="tiny-select" id="red_ups" onchange="calc()"><option value="1">N</option><option value="1.1">N+1</option><option value="1.8">2N</option></select>
+                        <select class="tiny-select" id="red_gen" onchange="calc()"><option value="1">N</option><option value="1.1">N+1</option></select>
+                        <div></div>
+
+                        <div></div><div class="grid-head">CRAH</div><div class="grid-head">Pumps</div><div class="grid-head">Chiller</div><div class="grid-head">Heat</div>
+                        
+                        <div class="grid-row-label">Cooling</div>
+                        <select class="tiny-select"><option>N</option></select>
+                        <select class="tiny-select"><option>N</option></select>
+                        <select class="tiny-select" id="red_chiller" onchange="calc()"><option value="1">N</option><option value="1.2">N+1</option><option value="1.8">2N</option></select>
+                        <select class="tiny-select"><option>N</option></select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-panel">
+                <div class="group-title">Include in Cost</div>
+                <div class="check-grid">
+                    <label class="check-item"><input type="checkbox" id="cb_racks" checked onchange="calc()"> Racks</label>
+                    <label class="check-item"><input type="checkbox" checked> Fire suppression</label>
+                    <label class="check-item"><input type="checkbox" id="cb_gen" checked onchange="calc()"> Generator</label>
+                    <label class="check-item"><input type="checkbox" checked> Switchgear</label>
+                    <label class="check-item"><input type="checkbox" checked> Raised floor</label>
+                    <label class="check-item"><input type="checkbox" checked> Dropped ceiling</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="main">
+            <div class="res-header">RESULTS SUMMARY</div>
+
+            <div class="section-bar">
+                Capital Cost Summary
+                <select style="background:transparent; border:none; color:#fff; font-weight:bold; font-size:12px; cursor:pointer;"><option>USD ($)</option></select>
+            </div>
+            <table class="summary-table">
+                <tr><td>Data Center Cost</td><td class="res-val" id="out_total">$ 7.2 M</td></tr>
+                <tr><td>Data Center Cost Per Watt</td><td class="res-val" id="out_per_watt">$ 7.19</td></tr>
+                <tr><td>Calculated Rack Quantity</td><td class="res-val" id="out_racks">250</td></tr>
+                <tr><td>IT Room Area</td><td class="res-val" id="out_it_area">8,125 ft²</td></tr>
+                <tr><td>Facility Area</td><td class="res-val" id="out_fac_area">13,195 ft²</td></tr>
+            </table>
+
+            <div class="section-bar">Cost Breakdown by Type</div>
+            <div class="chart-wrapper">
+                <div class="chart-row">
+                    <div class="chart-container"><canvas id="chartType"></canvas></div>
+                    <div class="legend">
+                        <div><span class="dot" style="background:#3DCD58"></span> Material (25%)</div>
+                        <div><span class="dot" style="background:#4DB4FA"></span> Installation (40%)</div>
+                        <div><span class="dot" style="background:#666"></span> Design (10%)</div>
+                        <div><span class="dot" style="background:#999"></span> Project Mgt (15%)</div>
+                        <div><span class="dot" style="background:#ccc"></span> Core & Shell (10%)</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-bar">Cost Breakdown by System</div>
+            <div class="chart-wrapper">
+                <div class="chart-row">
+                    <div class="chart-container"><canvas id="chartSys"></canvas></div>
+                    <div class="legend">
+                        <div><span class="dot" style="background:#3DCD58"></span> Power (<span id="pct_power">40</span>%)</div>
+                        <div><span class="dot" style="background:#4DB4FA"></span> Cooling (<span id="pct_cool">30</span>%)</div>
+                        <div><span class="dot" style="background:#999"></span> Other (<span id="pct_other">30</span>%)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Setup Logic ---
+        function updateLocation() {
+            const country = document.getElementById('country').value;
+            const laborSlider = document.getElementById('labor');
+            
+            if(country === 'TW') { laborSlider.value = 40; } 
+            else if (country === 'US') { laborSlider.value = 90; } 
+            else if (country === 'JP') { laborSlider.value = 80; }
+            calc(); 
+        }
+
+        // --- Init Charts (Schneider Colors) ---
+        const configPie = {
+            type: 'doughnut',
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } }, 
+                cutout: '60%',
+                borderWidth: 0
+            }
+        };
+        
+        // Colors: Green, Blue, Dark Gray, Mid Gray, Light Gray
+        const seColors = ['#3DCD58', '#4DB4FA', '#666666', '#999999', '#CCCCCC'];
+
+        // Chart 1: Type
+        const chartType = new Chart(document.getElementById('chartType'), {
+            ...configPie,
+            data: {
+                labels: ['Mat', 'Inst', 'Des', 'Mgt', 'Shell'],
+                datasets: [{ 
+                    data: [25, 40, 10, 15, 10], 
+                    backgroundColor: seColors, 
+                    borderWidth: 0 
+                }]
+            }
+        });
+
+        // Chart 2: System
+        const chartSys = new Chart(document.getElementById('chartSys'), {
+            ...configPie,
+            data: {
+                labels: ['Power', 'Cooling', 'Other'],
+                datasets: [{ 
+                    data: [40, 30, 30], 
+                    backgroundColor: ['#3DCD58', '#4DB4FA', '#999999'], 
+                    borderWidth: 0 
+                }]
+            }
+        });
+
+        // --- Calculation Logic ---
+        function calc() {
+            let cap = parseInt(document.getElementById('capacity').value);
+            let density = parseInt(document.getElementById('density').value);
+            let labor = parseInt(document.getElementById('labor').value);
+            let shellPrice = parseInt(document.getElementById('shell').value);
+            
+            let coolingFactor = parseFloat(document.getElementById('cooling_type').value);
+            let upsRedundancy = parseFloat(document.getElementById('red_ups').value);
+            let chillerRedundancy = parseFloat(document.getElementById('red_chiller').value);
+            
+            let hasGen = document.getElementById('cb_gen').checked;
+
+            document.getElementById('disp_density').innerText = density + " kW/rack";
+            document.getElementById('disp_labor').innerText = "$ " + labor + " /hr";
+            document.getElementById('disp_shell').innerText = "$ " + shellPrice + " /ft²";
+
+            let racks = Math.ceil(cap / density);
+            let itArea = racks * 30; 
+            let facArea = Math.round(itArea * 1.7); 
+
+            let basePowerCost = cap * 2500; 
+            if (!hasGen) basePowerCost *= 0.6; 
+            let powerCost = basePowerCost * upsRedundancy;
+
+            let baseCoolingCost = cap * 1500;
+            let coolingCost = baseCoolingCost * coolingFactor * chillerRedundancy;
+
+            let laborCost = (powerCost + coolingCost) * (labor / 100) * 0.4; 
+            let shellCost = facArea * shellPrice;
+            let otherCost = laborCost + shellCost + (cap * 500); 
+
+            let totalCost = powerCost + coolingCost + otherCost;
+            let costPerWatt = totalCost / (cap * 1000);
+
+            document.getElementById('out_total').innerText = "$ " + (totalCost / 1000000).toFixed(1) + " M";
+            document.getElementById('out_per_watt').innerText = "$ " + costPerWatt.toFixed(2);
+            document.getElementById('out_racks').innerText = racks.toLocaleString();
+            document.getElementById('out_it_area').innerText = itArea.toLocaleString() + " ft²";
+            document.getElementById('out_fac_area').innerText = facArea.toLocaleString() + " ft²";
+
+            let pPct = Math.round((powerCost / totalCost) * 100);
+            let cPct = Math.round((coolingCost / totalCost) * 100);
+            let oPct = 100 - pPct - cPct;
+
+            chartSys.data.datasets[0].data = [pPct, cPct, oPct];
+            chartSys.update();
+            
+            document.getElementById('pct_power').innerText = pPct;
+            document.getElementById('pct_cool').innerText = cPct;
+            document.getElementById('pct_other').innerText = oPct;
+
+            let shellPct = Math.round((shellCost / totalCost) * 100);
+            let remain = 100 - shellPct;
+            chartType.data.datasets[0].data = [
+                Math.round(remain * 0.25),
+                Math.round(remain * 0.40),
+                Math.round(remain * 0.15),
+                Math.round(remain * 0.20),
+                shellPct                  
+            ];
+            chartType.update();
+        }
+
+        calc();
+    </script>
+</body>
+</html>

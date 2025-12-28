@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schneider Electric - DC Efficiency TradeOff Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script> 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- 1. Design Tokens (Schneider Electric Style) --- */
+        :root {
+            --se-green: #3DCD58;       /* Life Is On Green */
+            --se-green-dark: #2db645;  /* For slider shadow */
+            --se-blue: #4DB4FA;        /* Cyan/Blue secondary */
+            --se-header-gray: #9EA0A5; /* Section Header Gray */
+            --se-bg-gray: #F2F2F2;     /* Panel Background */
+            --text-dark: #333333;
+            --text-white: #FFFFFF;
+        }
+
+        body { 
+            font-family: Arial, Helvetica, sans-serif; /* SE uses clean sans-serif */
+            margin: 0; 
+            background-color: #ffffff; 
+            color: var(--text-dark); 
+            height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        
+        /* --- Top Navigation --- */
+        header { 
+            background-color: var(--se-green); 
+            padding: 0 40px; 
+            height: 80px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            color: white;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            flex-shrink: 0;
+        }
+        
+        .brand { display: flex; align-items: center; gap: 20px; }
+        .brand img { height: 35px; width: auto; display: block; filter: brightness(0) invert(1); /* Make logo white */ }
+        .title { 
+            font-size: 22px; 
+            font-weight: 400; 
+            color: #fff;
+            border-left: 1px solid rgba(255,255,255,0.5); 
+            padding-left: 20px;
+            letter-spacing: 0.5px;
+        }
+        
+        /* --- Main Layout --- */
+        .container { 
+            display: flex; 
+            flex: 1; 
+            padding: 20px 40px; 
+            gap: 40px; 
+            overflow: hidden; 
+            max-width: 1600px; 
+            margin: 0 auto; 
+            width: 100%; 
+            box-sizing: border-box; 
+        }
+        
+        /* --- Left Panel: Inputs --- */
+        .left-panel { 
+            width: 40%; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 25px; 
+            overflow-y: auto; 
+            padding-right: 10px; 
+        }
+
+        .main-label {
+            font-size: 24px;
+            color: var(--se-green);
+            margin-bottom: 10px;
+            font-weight: normal;
+        }
+        
+        /* Input Group Styling (The Gray Bars) */
+        .input-group { 
+            background: #fff; 
+            border: none;
+            /* border-bottom: 1px solid #ddd; */
+        }
+        .group-header { 
+            background: var(--se-header-gray); /* The specific gray bar */
+            color: white; 
+            padding: 8px 15px; 
+            font-weight: bold; 
+            font-size: 16px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            border-radius: 4px 4px 0 0;
+        }
+        .group-header i { color: rgba(255,255,255,0.8); }
+        
+        .group-body { 
+            padding: 15px 10px; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            background: var(--se-bg-gray); /* Light gray background for inputs */
+            border-radius: 0 0 4px 4px;
+        }
+
+        .control-row { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            font-size: 14px; 
+            color: var(--text-dark); 
+        }
+        .control-row label { flex: 1.2; font-weight: normal; color: #555; }
+        .slider-container { flex: 1.5; display: flex; align-items: center; gap: 15px; }
+        
+        /* --- Schneider Electric Style Slider (The Green Ball) --- */
+        input[type="range"] { 
+            flex: 1; 
+            height: 8px; 
+            background: #d3d3d3; /* Gray track */
+            border-radius: 4px; 
+            outline: none; 
+            appearance: none; 
+            -webkit-appearance: none; 
+            cursor: pointer;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);
+        }
+        /* The Thumb (Handle) */
+        input[type="range"]::-webkit-slider-thumb { 
+            appearance: none; 
+            -webkit-appearance: none; 
+            width: 24px; 
+            height: 24px; 
+            border-radius: 50%; 
+            /* 3D Green Ball Effect */
+            background: radial-gradient(circle at 35% 35%, #84e897, var(--se-green), var(--se-green-dark));
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3); 
+            transition: transform 0.1s;
+            margin-top: -1px; /* alignments */
+            border: 1px solid #2db645;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { 
+            transform: scale(1.1); 
+            cursor: grab;
+        }
+        
+        .val-display { 
+            font-weight: bold; 
+            width: 60px; 
+            text-align: right; 
+            color: #333; /* Dark text for value */
+            font-family: Arial, sans-serif; 
+            font-size: 14px; 
+        }
+
+        /* Dropdown Style */
+        .styled-select {
+            width: 100%; 
+            padding: 8px; 
+            border: 1px solid #ccc; 
+            border-radius: 4px; 
+            background: linear-gradient(to bottom, #f9f9f9, #e0e0e0); /* Metallic look */
+            color: #333; 
+            font-size: 13px; 
+            outline: none; 
+            cursor: pointer;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+
+        /* --- Right Panel: Results --- */
+        .right-panel { 
+            width: 60%; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 20px; 
+            overflow-y: auto; 
+            padding-left: 20px;
+            border-left: 1px solid #e0e0e0;
+        }
+        
+        .result-box { 
+            background: #ffffff; 
+            display: flex; 
+            flex-direction: column; 
+            margin-bottom: 20px;
+        }
+        .result-header { 
+            background: var(--se-header-gray); 
+            color: #fff; 
+            padding: 10px 15px; 
+            font-weight: bold; 
+            font-size: 16px; 
+            display: flex; 
+            justify-content: space-between;
+            border-radius: 4px 4px 0 0;
+        }
+        /* Chart container with white background and border */
+        .chart-wrapper {
+            border: 1px solid #ddd;
+            border-top: none;
+            padding: 20px;
+            background: #fff;
+            border-radius: 0 0 4px 4px;
+        }
+        .chart-area { height: 220px; position: relative; }
+
+        /* Custom Legend for SE Style */
+        .custom-legend { 
+            display: flex; 
+            justify-content: center; 
+            gap: 30px; 
+            margin-top: 20px; 
+            padding: 10px; 
+            font-size: 12px; 
+            color: #666; 
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .color-box { width: 12px; height: 12px; border-radius: 2px; }
+
+        /* --- Responsive --- */
+        @media screen and (max-width: 900px) {
+            .container { flex-direction: column; padding: 15px; }
+            .left-panel, .right-panel { width: 100%; border: none; padding: 0; }
+            header { padding: 0 15px; height: 60px; }
+            .title { font-size: 16px; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/9/95/Schneider_Electric_2007.svg" alt="Schneider Electric">
+            <div class="title">DC Efficiency TradeOff Tool™</div>
+        </div>
+        <div><i class="fas fa-info-circle" style="font-size: 24px; opacity: 0.8; cursor: pointer;"></i></div>
+    </header>
+
+    <div class="container">
+        
+        <div class="left-panel">
+            <div class="main-label">Input</div>
+
+            <div class="input-group">
+                <div class="group-header">UPS Parameters <i class="far fa-question-circle"></i></div>
+                <div class="group-body">
+                    <div class="control-row">
+                        <label>Modern AC UPS Efficiency</label>
+                        <div class="slider-container">
+                            <input type="range" id="ups_ac" min="90" max="99" step="0.1" value="96.3" oninput="calc()">
+                            <span class="val-display" id="val_ups_ac">96.3%</span>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <label>DC UPS Efficiency</label>
+                        <div class="slider-container">
+                            <input type="range" id="ups_dc" min="90" max="99" step="0.1" value="97.5" oninput="calc()">
+                            <span class="val-display" id="val_ups_dc">97.5%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="group-header">Power Distribution <i class="far fa-question-circle"></i></div>
+                <div class="group-body">
+                    <div class="control-row">
+                        <label>Modern AC PDU Efficiency</label>
+                        <div class="slider-container">
+                            <input type="range" id="pdu_ac" min="95" max="99.9" step="0.1" value="98.3" oninput="calc()">
+                            <span class="val-display" id="val_pdu_ac">98.3%</span>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <label>Distribution Wiring Eff.</label>
+                        <div class="slider-container">
+                            <input type="range" id="wire" min="98" max="99.9" step="0.1" value="99.5" oninput="calc()">
+                            <span class="val-display" id="val_wire">99.5%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="group-header">IT Power Supply (PSU) <i class="far fa-question-circle"></i></div>
+                <div class="group-body">
+                    <div class="control-row">
+                        <label>Modern AC PSU Efficiency</label>
+                        <div class="slider-container">
+                            <input type="range" id="psu_ac" min="85" max="98" step="0.1" value="94.0" oninput="calc()">
+                            <span class="val-display" id="val_psu_ac">94.0%</span>
+                        </div>
+                    </div>
+                    <div class="control-row">
+                        <label>Modern DC PSU Efficiency</label>
+                        <div class="slider-container">
+                            <input type="range" id="psu_dc" min="85" max="98" step="0.1" value="96.0" oninput="calc()">
+                            <span class="val-display" id="val_psu_dc">96.0%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-group">
+                <div class="group-header">System Config <i class="far fa-question-circle"></i></div>
+                <div class="group-body">
+                    <div class="control-row">
+                        <label>Cooling Architecture</label>
+                        <div style="flex:1.5">
+                            <select class="styled-select">
+                                <option>Traditional Chilled Water</option>
+                                <option>Air-Cooled with Economizer</option>
+                                <option>Liquid Immersion Cooling</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="right-panel">
+            <div class="main-label">Results</div>
+            
+            <div class="result-box">
+                <div class="result-header">Power Path Efficiency (%)</div>
+                <div class="chart-wrapper">
+                    <div class="chart-area"><canvas id="chartEff"></canvas></div>
+                </div>
+            </div>
+
+            <div class="result-box">
+                <div class="result-header">Efficiency Improvement (%)</div>
+                <div class="chart-wrapper">
+                    <div class="chart-area"><canvas id="chartImp"></canvas></div>
+                </div>
+            </div>
+
+            <div class="result-box">
+                <div class="result-header">Total Power Reduction (%)</div>
+                <div class="chart-wrapper">
+                    <div class="chart-area"><canvas id="chartRed"></canvas></div>
+                    
+                    <div class="custom-legend">
+                        <div class="legend-item"><div class="color-box" style="background:#E0E0E0"></div>Legacy</div>
+                        <div class="legend-item"><div class="color-box" style="background:#B3E5FC"></div>Modern AC</div>
+                        <div class="legend-item"><div class="color-box" style="background:#4DB4FA"></div>480 VAC</div>
+                        <div class="legend-item"><div class="color-box" style="background:#3DCD58"></div>HVDC +/-400V</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.font.family = "Arial, sans-serif";
+        Chart.defaults.color = '#666'; 
+        Chart.defaults.font.size = 11;
+        
+        const colors = ['#E0E0E0', '#B3E5FC', '#4DB4FA', '#3DCD58']; 
+        const labels = ['Legacy', 'Modern AC', '480 VAC', 'HVDC +/-400V'];
+
+        let chartEff, chartImp, chartRed;
+
+        function initCharts() {
+            const commonOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: { 
+                        enabled: true, 
+                        backgroundColor: '#333', 
+                        titleColor: '#fff',
+                        padding: 10,
+                        cornerRadius: 4
+                    },
+                    // 【修改點 2】允許標籤繪製到圖表區域之外，防止被切斷
+                    datalabels: {
+                        clip: false
+                    }
+                },
+                // 增加頂部內距，為標籤留出空間
+                layout: { padding: { top: 30 } },
+                scales: {
+                    x: { 
+                        display: true, 
+                        grid: { display: false }, 
+                        ticks: { color: '#555', font: { weight: 'bold' } } 
+                    },
+                    y: {
+                        grid: { borderDash: [2, 4], color: '#eee' }
+                    }
+                }
+            };
+
+            // Chart 1: Efficiency
+            chartEff = new Chart(document.getElementById('chartEff'), {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ data: [0,0,0,0], backgroundColor: colors, barPercentage: 0.5, borderRadius: 2 }] },
+                options: { 
+                    ...commonOptions, 
+                    scales: { 
+                        ...commonOptions.scales, 
+                        y: { 
+                            ...commonOptions.scales.y, 
+                            // 【修改點 1】將最小值設為 0，確保 Legacy bar 可見。
+                            // 將最大值設為 105，為接近 100% 的標籤留空間。
+                            min: 0, 
+                            max: 105 
+                        } 
+                    },
+                    plugins: { 
+                        ...commonOptions.plugins, 
+                        datalabels: { 
+                            ...commonOptions.plugins.datalabels,
+                            anchor: 'end', align: 'top', color: '#555', font: { weight: 'bold' }, 
+                            formatter: (v)=>v.toFixed(1) 
+                        } 
+                    } 
+                },
+                plugins: [ChartDataLabels]
+            });
+
+            // Chart 2: Improvement
+            chartImp = new Chart(document.getElementById('chartImp'), {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ data: [0,0,0,0], backgroundColor: colors, barPercentage: 0.5, borderRadius: 2 }] },
+                options: { 
+                    ...commonOptions, 
+                    scales: { 
+                        ...commonOptions.scales, 
+                        y: { 
+                            ...commonOptions.scales.y, 
+                            beginAtZero: true, 
+                            // 【修改點 1】稍微增加最大值，防止標籤消失
+                            max: 30 
+                        } 
+                    },
+                    plugins: { 
+                        ...commonOptions.plugins, 
+                        datalabels: { 
+                            ...commonOptions.plugins.datalabels,
+                            anchor: 'end', align: 'top', color: '#555', 
+                            formatter: (v)=>v.toFixed(1)+'%' 
+                        } 
+                    } 
+                },
+                plugins: [ChartDataLabels]
+            });
+
+            // Chart 3: Reduction
+            chartRed = new Chart(document.getElementById('chartRed'), {
+                type: 'bar',
+                data: { labels: labels, datasets: [{ data: [0,0,0,0], backgroundColor: colors, barPercentage: 0.5, borderRadius: 2 }] },
+                options: { 
+                    ...commonOptions, 
+                    scales: { 
+                        ...commonOptions.scales, 
+                        y: { 
+                            ...commonOptions.scales.y, 
+                            beginAtZero: true, 
+                            // 【修改點 1】稍微增加最大值，防止標籤消失
+                            max: 25 
+                        } 
+                    },
+                    plugins: { 
+                        ...commonOptions.plugins, 
+                        datalabels: { 
+                            ...commonOptions.plugins.datalabels,
+                            anchor: 'end', align: 'top', color: '#555', 
+                            formatter: (v)=>v.toFixed(1)+'%' 
+                        } 
+                    } 
+                },
+                plugins: [ChartDataLabels]
+            });
+        }
+
+        function calc() {
+            const upsAc = parseFloat(document.getElementById('ups_ac').value) / 100;
+            const upsDc = parseFloat(document.getElementById('ups_dc').value) / 100;
+            const pduAc = parseFloat(document.getElementById('pdu_ac').value) / 100;
+            const wire = parseFloat(document.getElementById('wire').value) / 100;
+            const psuAc = parseFloat(document.getElementById('psu_ac').value) / 100;
+            const psuDc = parseFloat(document.getElementById('psu_dc').value) / 100;
+
+            document.getElementById('val_ups_ac').innerText = (upsAc*100).toFixed(1) + "%";
+            document.getElementById('val_ups_dc').innerText = (upsDc*100).toFixed(1) + "%";
+            document.getElementById('val_pdu_ac').innerText = (pduAc*100).toFixed(1) + "%";
+            document.getElementById('val_wire').innerText = (wire*100).toFixed(1) + "%";
+            document.getElementById('val_psu_ac').innerText = (psuAc*100).toFixed(1) + "%";
+            document.getElementById('val_psu_dc').innerText = (psuDc*100).toFixed(1) + "%";
+
+            const effLegacy = 0.88 * 0.95 * 0.98 * 0.82; 
+            const effModern = upsAc * pduAc * wire * psuAc;
+            const eff480 = effModern * 1.015; 
+            const effHVDC = upsDc * 0.998 * (wire + 0.002) * psuDc;
+
+            const effData = [effLegacy * 100, effModern * 100, eff480 * 100, effHVDC * 100];
+            const impData = effData.map(e => ((e - effLegacy * 100) / (effLegacy * 100)) * 100);
+
+            const inputLegacy = 1 / effLegacy;
+            const redData = [effLegacy, effModern, eff480, effHVDC].map(e => {
+                const inputCurrent = 1 / e;
+                return (1 - (inputCurrent / inputLegacy)) * 100;
+            });
+
+            chartEff.data.datasets[0].data = effData;
+            chartEff.update();
+
+            chartImp.data.datasets[0].data = impData;
+            chartImp.update();
+
+            chartRed.data.datasets[0].data = redData;
+            chartRed.update();
+        }
+
+        initCharts();
+        calc();
+
+    </script>
+</body>
+</html>
